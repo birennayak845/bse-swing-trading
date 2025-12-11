@@ -1,0 +1,15 @@
+venv
+env
+.git
+.gitignore
+.env.local
+.env
+*.pyc
+__pycache__
+.DS_Store
+node_modules
+.vscode
+.idea
+*.log
+watchlist.json
+logs/

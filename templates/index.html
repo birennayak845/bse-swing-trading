@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSE Swing Trading - Top 10 Stocks</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1><i class="fas fa-chart-line"></i> BSE Swing Trading Analysis</h1>
+                <p class="subtitle">Top 10 Stocks for Swing Trading (Long Position)</p>
+            </div>
+            <div class="header-actions">
+                <button id="refreshBtn" class="btn btn-primary">
+                    <i class="fas fa-sync-alt"></i> Refresh Data
+                </button>
+                <button id="settingsBtn" class="btn btn-secondary">
+                    <i class="fas fa-cog"></i> Settings
+                </button>
+            </div>
+        </header>
+
+        <!-- Info Box -->
+        <div class="info-box">
+            <i class="fas fa-info-circle"></i>
+            <span>Data updates every 15 minutes. Last updated: <span id="lastUpdate">-</span></span>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+            <div class="filter-group">
+                <label for="probabilityFilter">Min Probability:</label>
+                <input type="range" id="probabilityFilter" min="0" max="100" value="40" step="5">
+                <span id="probabilityValue">40%</span>
+            </div>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="spinner"></div>
+            <p>Analyzing stocks...</p>
+        </div>
+
+        <!-- Stocks Table -->
+        <div class="stocks-container">
+            <table class="stocks-table" id="stocksTable">
+                <thead>
+                    <tr>
+                        <th>Rank</th>
+                        <th>Ticker</th>
+                        <th>Company Name</th>
+                        <th>Sector</th>
+                        <th>Current Price</th>
+                        <th>Entry Price</th>
+                        <th>Stop Loss</th>
+                        <th>Target Price</th>
+                        <th>Risk/Reward</th>
+                        <th>Entry Time</th>
+                        <th>Swing Score</th>
+                        <th>Win Probability</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="stocksBody">
+                    <!-- Populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Stock Details Modal -->
+        <div id="detailsModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <div id="modalBody">
+                    <!-- Populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
