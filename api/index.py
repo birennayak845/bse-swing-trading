@@ -5,37 +5,93 @@ from datetime import datetime, timedelta
 import sys
 import os
 
-# Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Setup paths for serverless environment
+base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, base_path)
 
-from ranker import SwingTradingRanker
-import json
+template_folder = os.path.join(base_path, 'templates')
+static_folder = os.path.join(base_path, 'static')
 
+# Create Flask app with correct paths
 app = Flask(__name__, 
-            template_folder='../templates',
-            static_folder='../static',
+            template_folder=template_folder,
+            static_folder=static_folder,
             static_url_path='/static')
+
 CORS(app)
 
+# Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize ranker
+# Import modules
 try:
+    from ranker import SwingTradingRanker
     ranker = SwingTradingRanker(num_workers=3)
+    logger.info("✓ Ranker initialized successfully")
 except Exception as e:
-    logger.error(f"Error initializing ranker: {str(e)}")
+    logger.error(f"✗ Error initializing ranker: {str(e)}")
     ranker = None
 
-# Cache for results
+import json
+
+# Cache system
 cache = {}
 cache_duration = timedelta(minutes=15)
 
 
-@app.route('/')
+# ==================== ROUTES ====================
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'ok',
+        'timestamp': datetime.now().isoformat(),
+        'ranker_initialized': ranker is not None
+    })
+
+
+@app.route('/', methods=['GET'])
 def index():
-    """Serve the main page"""
-    return render_template('index.html')
+    """Serve the main dashboard page"""
+    try:
+        return render_template('index.html')
+    except Exception as e:
+        logger.error(f"Error rendering index.html: {str(e)}")
+        # Fallback HTML
+        return """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>BSE Swing Trading Platform</title>
+            <style>
+                body { font-family: Arial, sans-serif; margin: 40px; background: #f5f5f5; }
+                .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+                h1 { color: #333; }
+                .status { padding: 15px; margin: 10px 0; border-radius: 4px; }
+                .ok { background: #d4edda; color: #155724; }
+                .error { background: #f8d7da; color: #721c24; }
+                a { color: #007bff; text-decoration: none; }
+                a:hover { text-decoration: underline; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>🚀 BSE Swing Trading Platform</h1>
+                <div class="status ok">
+                    <strong>✓ Server is running!</strong>
+                </div>
+                <p>The API is operational and ready to serve requests.</p>
+                <h3>Available APIs:</h3>
+                <ul>
+                    <li><a href="/api/health">Health Check</a></li>
+                    <li><a href="/api/top-stocks">Top Stocks</a></li>
+                </ul>
+            </div>
+        </body>
+        </html>
+        """
 
 
 @app.route('/api/top-stocks', methods=['GET'])
@@ -51,7 +107,7 @@ def get_top_stocks():
         if not refresh and cache_key in cache:
             cached_data, cached_time = cache[cache_key]
             if datetime.now() - cached_time < cache_duration:
-                logger.info("Returning cached results")
+                logger.info("✓ Returning cached results")
                 return jsonify({
                     'success': True,
                     'data': cached_data,
@@ -99,37 +155,46 @@ def get_stock_analysis(ticker):
         if not ticker.endswith('.BO'):
             ticker = f"{ticker}.BO"
         
+        cache_key = f'stock_{ticker}'
+        
+        # Check cache
+        if cache_key in cache:
+            cached_data, cached_time = cache[cache_key]
+            if datetime.now() - cached_time < cache_duration:
+                return jsonify({
+                    'success': True,
+                    'data': cached_data,
+                    'from_cache': True
+                })
+        
         if ranker is None:
-            return jsonify({
-                'success': False,
-                'error': 'Ranker not initialized'
-            }), 500
+            return jsonify({'success': False, 'error': 'Ranker not initialized'}), 500
         
-        logger.info(f"Analyzing {ticker}...")
-        result = ranker.analyze_single_stock(ticker)
+        # Get analysis
+        analysis = ranker.analyze_single_stock(ticker)
         
-        if result:
-            formatted = ranker.format_for_display(result)
+        if analysis:
+            # Cache it
+            cache[cache_key] = (analysis, datetime.now())
+            
             return jsonify({
                 'success': True,
-                'data': formatted
+                'data': analysis,
+                'from_cache': False
             })
         else:
             return jsonify({
                 'success': False,
-                'error': f'Unable to analyze {ticker}'
+                'error': f'Could not analyze {ticker}'
             }), 404
     except Exception as e:
-        logger.error(f"Error analyzing {ticker}: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
+        logger.error(f"Error analyzing stock: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @app.route('/api/watchlist', methods=['GET', 'POST', 'DELETE'])
 def manage_watchlist():
-    """Manage watchlist"""
+    """Manage user watchlist"""
     try:
         watchlist_file = '/tmp/watchlist.json'
         
@@ -139,12 +204,17 @@ def manage_watchlist():
                     watchlist = json.load(f)
             else:
                 watchlist = []
+            
             return jsonify({'success': True, 'data': watchlist})
         
         elif request.method == 'POST':
             data = request.json
-            ticker = data.get('ticker')
+            ticker = data.get('ticker', '').upper()
             
+            if not ticker:
+                return jsonify({'success': False, 'error': 'Ticker required'}), 400
+            
+            # Load existing watchlist
             if os.path.exists(watchlist_file):
                 with open(watchlist_file, 'r') as f:
                     watchlist = json.load(f)
@@ -160,7 +230,7 @@ def manage_watchlist():
         
         elif request.method == 'DELETE':
             data = request.json
-            ticker = data.get('ticker')
+            ticker = data.get('ticker', '').upper()
             
             if os.path.exists(watchlist_file):
                 with open(watchlist_file, 'r') as f:
@@ -170,6 +240,8 @@ def manage_watchlist():
                     watchlist.remove(ticker)
                     with open(watchlist_file, 'w') as f:
                         json.dump(watchlist, f)
+            else:
+                watchlist = []
             
             return jsonify({'success': True, 'data': watchlist})
     except Exception as e:
@@ -177,11 +249,7 @@ def manage_watchlist():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check endpoint"""
-    return jsonify({'status': 'ok', 'timestamp': datetime.now().isoformat()})
-
+# ==================== ERROR HANDLERS ====================
 
 @app.errorhandler(404)
 def not_found(error):
@@ -196,5 +264,8 @@ def server_error(error):
     return jsonify({'success': False, 'error': 'Internal server error'}), 500
 
 
+# ==================== WSGI ENTRY POINT ====================
+
+# For local development
 if __name__ == '__main__':
     app.run(debug=False, host='0.0.0.0', port=5000)
