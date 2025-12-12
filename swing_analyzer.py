@@ -23,9 +23,18 @@ class RSI:
         delta = data.diff()
         gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
         loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-        rs = gain / loss
+
+        # Safe division to avoid division by zero
+        # When loss is 0 and gain > 0: RSI = 100 (all gains, extremely overbought)
+        # When both are 0: RSI = 50 (neutral)
+        # When gain is 0 and loss > 0: RSI = 0 (all losses, extremely oversold)
+        rs = gain / loss.replace(0, np.nan)  # Avoid division by zero
         rsi = 100 - (100 / (1 + rs))
-        return rsi.fillna(50)
+
+        # Handle edge cases where loss was zero
+        rsi = rsi.fillna(50)  # Default to neutral when both gain and loss are 0
+        rsi = rsi.where(~((loss == 0) & (gain > 0)), 100)  # RSI = 100 when only gains
+        return rsi
 
 
 class MACD:
