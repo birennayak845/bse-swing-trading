@@ -142,11 +142,16 @@ class ProbabilityScorer:
             wins = 0
             total = 0
             
-            for idx in similar_periods[:-1]:  # Exclude current
-                next_idx = idx + 1 if idx + 1 < len(df) else None
-                if next_idx and next_idx < len(df) - 1:
-                    future_price = df['Close'].iloc[next_idx + 5:next_idx + 20].max() if next_idx + 20 <= len(df) else df['Close'].iloc[next_idx:].max()
-                    entry_price = df['Close'].iloc[idx]
+            # Convert index to integer positions
+            for i, idx in enumerate(similar_periods[:-1]):  # Exclude current
+                current_pos = df.index.get_loc(idx)
+                next_pos = current_pos + 1
+                
+                if next_pos < len(df) - 1:
+                    # Look at next 5-20 days for max price
+                    end_pos = min(next_pos + 20, len(df))
+                    future_price = df['Close'].iloc[next_pos:end_pos].max()
+                    entry_price = df['Close'].iloc[current_pos]
                     
                     if future_price > entry_price * 1.02:  # 2% gain
                         wins += 1

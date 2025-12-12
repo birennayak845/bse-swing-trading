@@ -117,13 +117,20 @@ class SwingTradingRanker:
                 for ticker in stock_list
             }
             
-            for future in as_completed(future_to_ticker):
-                try:
-                    result = future.result()
-                    if result and result['probability_score'] >= min_probability:
-                        results.append(result)
-                except Exception as e:
-                    logger.error(f"Error in thread: {str(e)}")
+            # Use timeout on as_completed to prevent infinite hangs
+            try:
+                for future in as_completed(future_to_ticker, timeout=30):
+                    try:
+                        result = future.result(timeout=5)
+                        if result and result['probability_score'] >= min_probability:
+                            results.append(result)
+                    except Exception as e:
+                        ticker = future_to_ticker.get(future, 'unknown')
+                        logger.error(f"Error analyzing {ticker}: {str(e)}")
+            except Exception as timeout_e:
+                logger.error(f"ThreadPoolExecutor timeout: {str(timeout_e)}")
+                # Return whatever we have so far
+                pass
         
         # Sort by probability score (descending) and then by swing score
         results.sort(key=lambda x: (x['probability_score'], x['swing_score']), reverse=True)

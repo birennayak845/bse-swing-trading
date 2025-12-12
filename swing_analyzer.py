@@ -5,12 +5,52 @@ Identifies swing trading opportunities using technical indicators
 
 import pandas as pd
 import numpy as np
-from ta.momentum import RSIIndicator, MACD
-from ta.volatility import BollingerBands
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+# Simple technical indicator implementations (avoiding ta library issues)
+class RSI:
+    """Relative Strength Index indicator"""
+    @staticmethod
+    def calculate(data, period=14):
+        """Calculate RSI"""
+        if len(data) < period:
+            return [50] * len(data)
+        
+        delta = data.diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        return rsi.fillna(50)
+
+
+class MACD:
+    """MACD indicator"""
+    @staticmethod
+    def calculate(data, fast=12, slow=26, signal=9):
+        """Calculate MACD"""
+        ema_fast = data.ewm(span=fast).mean()
+        ema_slow = data.ewm(span=slow).mean()
+        macd = ema_fast - ema_slow
+        signal_line = macd.ewm(span=signal).mean()
+        histogram = macd - signal_line
+        return macd, signal_line, histogram
+
+
+class BollingerBands:
+    """Bollinger Bands indicator"""
+    @staticmethod
+    def calculate(data, period=20, std_dev=2):
+        """Calculate Bollinger Bands"""
+        sma = data.rolling(window=period).mean()
+        std = data.rolling(window=period).std()
+        upper_band = sma + (std * std_dev)
+        lower_band = sma - (std * std_dev)
+        return upper_band, sma, lower_band
 
 
 class SwingTradingAnalyzer:
@@ -35,20 +75,19 @@ class SwingTradingAnalyzer:
             df = df.copy()
             
             # RSI
-            rsi = RSIIndicator(close=df['Close'], window=14)
-            df['RSI'] = rsi.rsi()
+            df['RSI'] = RSI.calculate(df['Close'], period=14)
             
             # MACD
-            macd = MACD(close=df['Close'], window_fast=12, window_slow=26, window_sign=9)
-            df['MACD'] = macd.macd()
-            df['MACD_signal'] = macd.macd_signal()
-            df['MACD_diff'] = macd.macd_diff()
+            macd, signal_line, histogram = MACD.calculate(df['Close'], fast=12, slow=26, signal=9)
+            df['MACD'] = macd
+            df['MACD_signal'] = signal_line
+            df['MACD_diff'] = histogram
             
             # Bollinger Bands
-            bb = BollingerBands(close=df['Close'], window=20, window_dev=2)
-            df['BB_upper'] = bb.bollinger_hband()
-            df['BB_middle'] = bb.bollinger_mavg()
-            df['BB_lower'] = bb.bollinger_lband()
+            bb_upper, bb_middle, bb_lower = BollingerBands.calculate(df['Close'], period=20, std_dev=2)
+            df['BB_upper'] = bb_upper
+            df['BB_middle'] = bb_middle
+            df['BB_lower'] = bb_lower
             
             # SMA (Simple Moving Average)
             df['SMA_20'] = df['Close'].rolling(window=20).mean()
