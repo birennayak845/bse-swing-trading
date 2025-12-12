@@ -51,7 +51,14 @@ class BSEDataFetcher:
                     return self.cache[cache_key]
             
             logger.info(f"Fetching data for {ticker}...")
-            data = yf.download(ticker, period=period, interval=interval, progress=False)
+            # Add explicit timeout to prevent hanging
+            data = yf.download(
+                ticker, 
+                period=period, 
+                interval=interval, 
+                progress=False,
+                timeout=10  # 10 second timeout
+            )
             
             # Cache the data
             self.cache[cache_key] = data

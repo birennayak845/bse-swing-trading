@@ -45,8 +45,8 @@ def get_ranker():
         except Exception as init_error:
             logger.error(f"✗ Error initializing ranker: {str(init_error)}")
             logger.error(f"  Error type: {type(init_error).__name__}")
-            logger.error(f"  This likely means data fetching is timing out in serverless")
-            return None
+            logger.error(f"  This likely means yfinance is timing out or market data is unavailable")
+            ranker = None
     return ranker
 
 # Cache system with persistence
@@ -342,24 +342,20 @@ def get_top_stocks():
         # Try to fetch fresh data
         current_ranker = get_ranker()
         if current_ranker is None:
-            logger.error("Ranker initialization failed")
-            if cache['data']:
-                logger.info("Returning cached data due to ranker initialization error")
-                stocks_to_return = cache['data'][:num_stocks]
-                return jsonify({
-                    'success': True,
-                    'data': stocks_to_return,
-                    'timestamp': cache['timestamp'],
-                    'from_cache': True,
-                    'total_cached': len(cache['data']),
-                    'count': len(stocks_to_return)
-                })
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': 'Data fetcher initialization failed. Please wait a moment and try again. If the problem persists, the market data service may be temporarily unavailable.',
-                    'timestamp': datetime.now().isoformat()
-                }), 503
+            logger.error("Ranker initialization failed - falling back to demo data")
+            # Fall back to demo data instead of showing error
+            filtered_demo = [stock for stock in DEMO_DATA if stock['probability_score'] >= min_probability]
+            stocks_to_return = filtered_demo[:num_stocks]
+            return jsonify({
+                'success': True,
+                'data': stocks_to_return,
+                'timestamp': datetime.now().isoformat(),
+                'from_cache': False,
+                'is_demo': True,
+                'total_available': len(filtered_demo),
+                'count': len(stocks_to_return),
+                'message': 'Live market data unavailable. Showing demo data. Try again in a moment.'
+            })
         
         logger.info("Fetching fresh data from market...")
         
