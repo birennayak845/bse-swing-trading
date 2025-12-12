@@ -25,14 +25,29 @@ CORS(app)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Import modules
+# Import modules (lazy initialization to avoid cold-start timeout)
 try:
     from ranker import SwingTradingRanker
-    ranker = SwingTradingRanker(num_workers=3)
-    logger.info("✓ Ranker initialized successfully")
-except Exception as e:
-    logger.error(f"✗ Error initializing ranker: {str(e)}")
+    ranker = None  # Will be initialized on first request
+    logger.info("✓ Ranker module imported successfully (lazy init)")
+except Exception as import_error:
+    logger.error(f"✗ Error importing ranker module: {str(import_error)}")
     ranker = None
+
+def get_ranker():
+    """Lazy initialization of ranker - only initialize when needed"""
+    global ranker
+    if ranker is None:
+        try:
+            logger.info("Initializing ranker on first request...")
+            ranker = SwingTradingRanker(num_workers=3)
+            logger.info("✓ Ranker initialized successfully")
+        except Exception as init_error:
+            logger.error(f"✗ Error initializing ranker: {str(init_error)}")
+            logger.error(f"  Error type: {type(init_error).__name__}")
+            logger.error(f"  This likely means data fetching is timing out in serverless")
+            return None
+    return ranker
 
 # Cache system with persistence
 cache_file = '/tmp/stocks_cache.json'
@@ -77,7 +92,7 @@ def health():
     return jsonify({
         'status': 'ok',
         'timestamp': datetime.now().isoformat(),
-        'ranker_initialized': ranker is not None,
+        'ranker_available': ranker is not None or get_ranker() is not None,
         'cached_data_available': cache['data'] is not None,
         'last_fetch': cache['timestamp']
     })
@@ -153,10 +168,11 @@ def get_top_stocks():
             })
         
         # Try to fetch fresh data
-        if ranker is None:
-            logger.error("Ranker not initialized")
+        current_ranker = get_ranker()
+        if current_ranker is None:
+            logger.error("Ranker initialization failed")
             if cache['data']:
-                logger.info("Returning cached data due to ranker error")
+                logger.info("Returning cached data due to ranker initialization error")
                 stocks_to_return = cache['data'][:num_stocks]
                 return jsonify({
                     'success': True,
@@ -169,15 +185,15 @@ def get_top_stocks():
             else:
                 return jsonify({
                     'success': False,
-                    'error': 'Failed to initialize data fetcher. No cached data available.',
+                    'error': 'Data fetcher initialization failed. Please wait a moment and try again. If the problem persists, the market data service may be temporarily unavailable.',
                     'timestamp': datetime.now().isoformat()
-                }), 500
+                }), 503
         
         logger.info("Fetching fresh data from market...")
         
         try:
             # Get more stocks than requested to have flexibility
-            top_stocks = ranker.get_top_10_stocks(
+            top_stocks = current_ranker.get_top_10_stocks(
                 min_probability=min_probability,
                 stock_list=None  # Use default list
             )
@@ -203,7 +219,7 @@ def get_top_stocks():
                     }), 500
             
             # Format results
-            formatted_results = [ranker.format_for_display(stock) for stock in top_stocks]
+            formatted_results = [current_ranker.format_for_display(stock) for stock in top_stocks]
             
             # Update cache
             cache['data'] = formatted_results
@@ -275,13 +291,14 @@ def get_stock_analysis(ticker):
         if not ticker.endswith('.BO'):
             ticker = f"{ticker}.BO"
         
-        if ranker is None:
-            return jsonify({'success': False, 'error': 'Ranker not initialized'}), 500
+        current_ranker = get_ranker()
+        if current_ranker is None:
+            return jsonify({'success': False, 'error': 'Ranker not initialized'}), 503
         
         logger.info(f"Analyzing {ticker}...")
         
         # Get analysis
-        analysis = ranker.analyze_single_stock(ticker)
+        analysis = current_ranker.analyze_single_stock(ticker)
         
         if analysis:
             return jsonify({
