@@ -135,6 +135,7 @@ function showLoading(show) {
 function showStatus(data) {
     const statusBox = document.getElementById('statusBox');
     const lastUpdate = document.getElementById('lastUpdate');
+    const warningBox = document.getElementById('warningBox');
 
     if (data.timestamp) {
         const date = new Date(data.timestamp);
@@ -143,11 +144,22 @@ function showStatus(data) {
 
     statusBox.style.display = 'flex';
 
-    if (data.from_cache) {
-        const warningBox = document.getElementById('warningBox');
+    // Handle demo data message
+    if (data.is_demo) {
+        warningBox.style.display = 'flex';
+        document.getElementById('warningMessage').textContent = 
+            'Showing demo data. Click "Refresh Data" to fetch live market data.';
+    }
+    // Handle cached data message
+    else if (data.from_cache) {
         warningBox.style.display = 'flex';
         document.getElementById('warningMessage').textContent = 
             `Using cached data (${data.total_cached || data.count} stocks fetched on ${new Date(data.timestamp).toLocaleString()})`;
+    }
+    // Handle any other messages
+    else if (data.message) {
+        warningBox.style.display = 'flex';
+        document.getElementById('warningMessage').textContent = data.message;
     }
 }
 
