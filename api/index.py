@@ -354,7 +354,7 @@ def get_top_stocks():
                 'is_demo': True,
                 'total_available': len(filtered_demo),
                 'count': len(stocks_to_return),
-                'message': 'Live market data unavailable. Showing demo data. Try again in a moment.'
+                'message': 'Demo data (live market data temporarily unavailable). Try refreshing again.'
             })
         
         logger.info("Fetching fresh data from market...")
