@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BSE Swing Trading - Top 10 Stocks</title>
+    <title>BSE Swing Trading Analysis</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -13,26 +13,43 @@
         <header class="header">
             <div class="header-content">
                 <h1><i class="fas fa-chart-line"></i> BSE Swing Trading Analysis</h1>
-                <p class="subtitle">Top 10 Stocks for Swing Trading (Long Position)</p>
+                <p class="subtitle">Real-time stock analysis for swing trading opportunities</p>
             </div>
             <div class="header-actions">
                 <button id="refreshBtn" class="btn btn-primary">
                     <i class="fas fa-sync-alt"></i> Refresh Data
                 </button>
-                <button id="settingsBtn" class="btn btn-secondary">
-                    <i class="fas fa-cog"></i> Settings
-                </button>
             </div>
         </header>
 
-        <!-- Info Box -->
-        <div class="info-box">
+        <!-- Status Box -->
+        <div id="statusBox" class="info-box" style="display: none;">
             <i class="fas fa-info-circle"></i>
-            <span>Data updates every 15 minutes. Last updated: <span id="lastUpdate">-</span></span>
+            <span>Last updated: <span id="lastUpdate">-</span></span>
+        </div>
+
+        <!-- Error Box -->
+        <div id="errorBox" class="error-box" style="display: none;">
+            <i class="fas fa-exclamation-circle"></i>
+            <div>
+                <strong id="errorTitle">Error</strong>
+                <p id="errorMessage" style="margin: 4px 0 0 0;">-</p>
+            </div>
+        </div>
+
+        <!-- Warning Box -->
+        <div id="warningBox" class="warning-box" style="display: none;">
+            <i class="fas fa-info-circle"></i>
+            <span id="warningMessage">Using cached data</span>
         </div>
 
         <!-- Filters -->
         <div class="filters">
+            <div class="filter-group">
+                <label for="countFilter">Show:</label>
+                <input type="number" id="countFilter" min="1" max="100" value="10">
+                <span>stocks</span>
+            </div>
             <div class="filter-group">
                 <label for="probabilityFilter">Min Probability:</label>
                 <input type="range" id="probabilityFilter" min="0" max="100" value="40" step="5">
@@ -47,37 +64,124 @@
         </div>
 
         <!-- Stocks Table -->
-        <div class="stocks-container">
-            <table class="stocks-table" id="stocksTable">
+        <div class="stocks-container" id="stocksContainer">
+            <table id="stocksTable">
                 <thead>
                     <tr>
-                        <th>Rank</th>
                         <th>Ticker</th>
-                        <th>Company Name</th>
-                        <th>Sector</th>
                         <th>Current Price</th>
-                        <th>Entry Price</th>
+                        <th>Entry</th>
                         <th>Stop Loss</th>
-                        <th>Target Price</th>
+                        <th>Target</th>
                         <th>Risk/Reward</th>
-                        <th>Entry Time</th>
                         <th>Swing Score</th>
-                        <th>Win Probability</th>
-                        <th>Actions</th>
+                        <th>Probability</th>
                     </tr>
                 </thead>
                 <tbody id="stocksBody">
-                    <!-- Populated by JavaScript -->
                 </tbody>
             </table>
         </div>
 
-        <!-- Stock Details Modal -->
-        <div id="detailsModal" class="modal">
-            <div class="modal-content">
-                <span class="close">&times;</span>
-                <div id="modalBody">
-                    <!-- Populated by JavaScript -->
+        <!-- Empty State -->
+        <div id="emptyState" style="display: none; text-align: center; padding: 60px 20px;">
+            <i class="fas fa-inbox" style="font-size: 48px; color: var(--text-secondary); margin-bottom: 16px; display: block;"></i>
+            <p style="color: var(--text-secondary); margin: 0;">No stocks to display</p>
+        </div>
+    </div>
+
+    <!-- Stock Details Modal -->
+    <div id="stockModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-chart-line"></i> <span id="modalTicker"></span></h2>
+                <button class="modal-close" onclick="closeModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-section">
+                    <h3>Price Information</h3>
+                    <div class="modal-grid">
+                        <div class="modal-item">
+                            <div class="modal-item-label">Current Price</div>
+                            <div class="modal-item-value" id="modalCurrentPrice">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">Entry Price</div>
+                            <div class="modal-item-value" id="modalEntryPrice">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">Stop Loss</div>
+                            <div class="modal-item-value" id="modalStopLoss">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">Target Price</div>
+                            <div class="modal-item-value" id="modalTargetPrice">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Risk Management</h3>
+                    <div class="modal-grid">
+                        <div class="modal-item">
+                            <div class="modal-item-label">Risk Amount</div>
+                            <div class="modal-item-value" id="modalRisk">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">Reward Amount</div>
+                            <div class="modal-item-value" id="modalReward">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">Risk/Reward Ratio</div>
+                            <div class="modal-item-value" id="modalRRatio">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Support & Resistance</h3>
+                    <div class="modal-grid">
+                        <div class="modal-item">
+                            <div class="modal-item-label">Support</div>
+                            <div class="modal-item-value" id="modalSupport">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">Resistance</div>
+                            <div class="modal-item-value" id="modalResistance">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Technical Analysis</h3>
+                    <div class="modal-grid">
+                        <div class="modal-item">
+                            <div class="modal-item-label">RSI</div>
+                            <div class="modal-item-value" id="modalRSI">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">MACD</div>
+                            <div class="modal-item-value" id="modalMACD">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">Swing Score</div>
+                            <div class="modal-item-value" id="modalSwingScore">-</div>
+                        </div>
+                        <div class="modal-item">
+                            <div class="modal-item-label">Win Probability</div>
+                            <div class="modal-item-value" id="modalProbability">-</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="modal-section">
+                    <h3>Entry Details</h3>
+                    <div class="modal-grid">
+                        <div class="modal-item">
+                            <div class="modal-item-label">Entry Time</div>
+                            <div class="modal-item-value" id="modalEntryTime">-</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
