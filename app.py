@@ -33,18 +33,23 @@ def index():
 @app.route('/api/top-stocks', methods=['GET'])
 def get_top_stocks():
     """
-    Get top 10 stocks for swing trading
-    
+    Get top stocks for swing trading
+
     Query params:
+    - limit: Number of stocks to return (default: 10)
     - min_probability: Minimum probability threshold (default: 40)
     - refresh: Force refresh data (default: False)
     """
     try:
+        limit = request.args.get('limit', 10, type=int)
         min_probability = request.args.get('min_probability', 40, type=float)
         refresh = request.args.get('refresh', 'false').lower() == 'true'
-        
-        cache_key = f'top_stocks_{min_probability}'
-        
+
+        # Ensure limit is reasonable
+        limit = min(max(limit, 1), 50)  # Between 1 and 50
+
+        cache_key = f'top_stocks_{limit}_{min_probability}'
+
         # Check cache
         if not refresh and cache_key in cache:
             cached_data, cached_time = cache[cache_key]
@@ -56,18 +61,18 @@ def get_top_stocks():
                     'timestamp': cached_time.isoformat(),
                     'from_cache': True
                 })
-        
-        logger.info(f"Fetching top stocks (min_probability={min_probability})...")
-        
+
+        logger.info(f"Fetching top {limit} stocks (min_probability={min_probability})...")
+
         # Get fresh data
-        top_10 = ranker.get_top_10_stocks(min_probability=min_probability)
-        
+        top_stocks = ranker.get_top_stocks(limit=limit, min_probability=min_probability)
+
         # Format for display
-        formatted_results = [ranker.format_for_display(stock) for stock in top_10]
-        
+        formatted_results = [ranker.format_for_display(stock) for stock in top_stocks]
+
         # Cache results
         cache[cache_key] = (formatted_results, datetime.now())
-        
+
         return jsonify({
             'success': True,
             'data': formatted_results,

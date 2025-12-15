@@ -94,29 +94,32 @@ class SwingTradingRanker:
             logger.error(f"Error analyzing {ticker}: {str(e)}")
             return None
     
-    def get_top_10_stocks(self, stock_list=None, min_probability=40):
+    def get_top_stocks(self, limit=10, stock_list=None, min_probability=40):
         """
-        Get top 10 stocks for swing trading
-        
+        Get top N stocks for swing trading
+
         Args:
+            limit (int): Number of top stocks to return (default: 10)
             stock_list (list): List of tickers to analyze (default: BSE_TOP_STOCKS)
             min_probability (float): Minimum probability threshold
-        
+
         Returns:
-            list: Top 10 stocks sorted by probability and swing score
+            list: Top N stocks sorted by probability and swing score
         """
         if stock_list is None:
-            stock_list = BSE_TOP_STOCKS[:20]  # Analyze top 20 to get top 10
-        
+            # Analyze more stocks than requested to filter by min_probability
+            analyze_count = min(len(BSE_TOP_STOCKS), max(limit * 2, 20))
+            stock_list = BSE_TOP_STOCKS[:analyze_count]
+
         results = []
-        
+
         # Use thread pool for faster analysis
         with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
             future_to_ticker = {
-                executor.submit(self.analyze_single_stock, ticker): ticker 
+                executor.submit(self.analyze_single_stock, ticker): ticker
                 for ticker in stock_list
             }
-            
+
             # Use timeout on as_completed to prevent infinite hangs
             try:
                 for future in as_completed(future_to_ticker, timeout=30):
@@ -131,12 +134,25 @@ class SwingTradingRanker:
                 logger.error(f"ThreadPoolExecutor timeout: {str(timeout_e)}")
                 # Return whatever we have so far
                 pass
-        
+
         # Sort by probability score (descending) and then by swing score
         results.sort(key=lambda x: (x['probability_score'], x['swing_score']), reverse=True)
-        
-        # Return top 10
-        return results[:10]
+
+        # Return top N
+        return results[:limit]
+
+    def get_top_10_stocks(self, stock_list=None, min_probability=40):
+        """
+        Get top 10 stocks for swing trading (backward compatibility)
+
+        Args:
+            stock_list (list): List of tickers to analyze (default: BSE_TOP_STOCKS)
+            min_probability (float): Minimum probability threshold
+
+        Returns:
+            list: Top 10 stocks sorted by probability and swing score
+        """
+        return self.get_top_stocks(limit=10, stock_list=stock_list, min_probability=min_probability)
     
     def format_for_display(self, stock_data):
         """
