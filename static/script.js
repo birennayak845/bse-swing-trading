@@ -4,17 +4,21 @@ let currentStocks = [];
 
 // Metric definitions for tooltips
 const METRIC_INFO = {
-    'RSI': 'Relative Strength Index (0-100): Measures momentum. Below 30 = Oversold (Buy signal), Above 70 = Overbought (Sell signal)',
-    'MACD': 'Moving Average Convergence Divergence: Trend indicator. Positive = Bullish, Negative = Bearish',
+    'Ticker': 'Stock Symbol: BSE/NSE stock ticker code (e.g., RELIANCE.BO)',
+    'Current Price': 'Current Market Price: Latest trading price of the stock',
+    'Entry': 'Entry Price: Recommended price to buy the stock based on technical analysis',
+    'Stop Loss': 'Stop Loss Price: Exit point to limit losses if trade goes wrong. Risk management tool',
+    'Target': 'Target Price: Expected price level to sell for profit',
+    'Risk/Reward': 'Risk-Reward Ratio: Expected reward divided by risk. Higher is better (e.g., 2:1 means ₹2 gain for every ₹1 risk)',
     'Swing Score': 'Overall trading score (0-100): Combines multiple technical indicators. Higher = Better opportunity',
     'Probability': 'Success probability (%): Statistical likelihood of reaching target price based on technical analysis',
-    'R:R Ratio': 'Risk-Reward Ratio: Expected reward divided by risk. Higher is better (e.g., 2:1 means ₹2 gain for every ₹1 risk)',
+    'RSI': 'Relative Strength Index (0-100): Measures momentum. Below 30 = Oversold (Buy signal), Above 70 = Overbought (Sell signal)',
+    'MACD': 'Moving Average Convergence Divergence: Trend indicator. Positive = Bullish, Negative = Bearish',
     'Support': 'Support Level: Price floor where stock tends to bounce back up. Good entry point',
     'Resistance': 'Resistance Level: Price ceiling where stock tends to fall back down. Target/exit point',
-    'Stop Loss': 'Stop Loss Price: Exit point to limit losses if trade goes wrong. Risk management tool',
-    'Entry Price': 'Recommended Entry Price: Optimal price to buy the stock based on technical analysis',
-    'Target Price': 'Target Price: Expected price level to sell for profit',
-    'Entry Time': 'Best Entry Timing: When to enter the trade for optimal results'
+    'Entry Time': 'Best Entry Timing: When to enter the trade for optimal results',
+    'Risk': 'Potential Loss: Amount you could lose if stop loss is hit',
+    'Reward': 'Potential Gain: Amount you could gain if target is reached'
 };
 
 // Initialize on page load
