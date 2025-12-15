@@ -61,22 +61,36 @@ async function loadStocks(refresh) {
 
     try {
         const url = `${API_BASE}/top-stocks?min_probability=${minProb}&count=${count}&refresh=${refresh}`;
-        const response = await fetch(url);
-        const data = await response.json();
 
+        // Set timeout for mobile browsers
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+
+        const response = await fetch(url, { signal: controller.signal });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = await response.json();
         showLoading(false);
 
         if (data.success) {
-            currentStocks = data.data;
+            currentStocks = data.data || [];
             displayStocks(data);
             showStatus(data);
         } else {
-            showError(data.error);
+            showError(data.error || 'Unknown error occurred');
             console.error('API Error:', data);
         }
     } catch (error) {
         showLoading(false);
-        showError(`Network error: ${error.message}`);
+        if (error.name === 'AbortError') {
+            showError('Request timeout. Please try again or reduce the number of stocks.');
+        } else {
+            showError(`Failed to load data: ${error.message}`);
+        }
         console.error('Fetch error:', error);
     }
 }
@@ -96,49 +110,67 @@ function displayStocks(data) {
     document.getElementById('stocksContainer').style.display = 'block';
     emptyState.style.display = 'none';
 
-    tbody.innerHTML = currentStocks.map((stock, index) => {
+    // Use DocumentFragment for better performance
+    const fragment = document.createDocumentFragment();
+
+    currentStocks.forEach((stock, index) => {
         const probability = parseFloat(stock.probability_score);
         let probClass = 'probability-low';
         if (probability >= 70) probClass = 'probability-high';
         else if (probability >= 55) probClass = 'probability-medium';
 
-        return `
-            <tr onclick="showStockDetails(${index})">
-                <td><span class="ticker-cell">${stock.ticker}</span></td>
-                <td class="price-cell">${stock.current_price}</td>
-                <td class="price-cell">${stock.entry_price}</td>
-                <td class="price-cell">${stock.stop_loss}</td>
-                <td class="price-cell">${stock.target_price}</td>
-                <td>${stock.rr_ratio}</td>
-                <td>${stock.swing_score}/100</td>
-                <td><span class="probability-score ${probClass}">${stock.probability_score}</span></td>
-            </tr>
+        const row = document.createElement('tr');
+        row.onclick = () => showStockDetails(index);
+        row.innerHTML = `
+            <td><span class="ticker-cell">${stock.ticker || 'N/A'}</span></td>
+            <td class="price-cell">${stock.current_price || 'N/A'}</td>
+            <td class="price-cell">${stock.entry_price || 'N/A'}</td>
+            <td class="price-cell">${stock.stop_loss || 'N/A'}</td>
+            <td class="price-cell">${stock.target_price || 'N/A'}</td>
+            <td>${stock.rr_ratio || 'N/A'}</td>
+            <td>${stock.swing_score || 'N/A'}/100</td>
+            <td><span class="probability-score ${probClass}">${stock.probability_score || 'N/A'}</span></td>
         `;
-    }).join('');
+        fragment.appendChild(row);
+    });
+
+    // Clear and append in one operation
+    tbody.innerHTML = '';
+    tbody.appendChild(fragment);
 }
 
 // Show stock details modal
 function showStockDetails(index) {
-    const stock = currentStocks[index];
-    if (!stock) return;
+    try {
+        const stock = currentStocks[index];
+        if (!stock) return;
 
-    document.getElementById('modalTicker').textContent = stock.ticker;
-    document.getElementById('modalCurrentPrice').textContent = stock.current_price;
-    document.getElementById('modalEntryPrice').textContent = stock.entry_price;
-    document.getElementById('modalStopLoss').textContent = stock.stop_loss;
-    document.getElementById('modalTargetPrice').textContent = stock.target_price;
-    document.getElementById('modalRisk').textContent = stock.risk;
-    document.getElementById('modalReward').textContent = stock.reward;
-    document.getElementById('modalRRatio').textContent = stock.rr_ratio;
-    document.getElementById('modalSupport').textContent = stock.support;
-    document.getElementById('modalResistance').textContent = stock.resistance;
-    document.getElementById('modalRSI').textContent = stock.rsi;
-    document.getElementById('modalMACD').textContent = stock.macd;
-    document.getElementById('modalSwingScore').textContent = stock.swing_score + '/100';
-    document.getElementById('modalProbability').textContent = stock.probability_score;
-    document.getElementById('modalEntryTime').textContent = stock.entry_time;
+        // Safely set text content with fallback values
+        const setText = (id, value) => {
+            const element = document.getElementById(id);
+            if (element) element.textContent = value || 'N/A';
+        };
 
-    document.getElementById('stockModal').classList.add('show');
+        setText('modalTicker', stock.ticker);
+        setText('modalCurrentPrice', stock.current_price);
+        setText('modalEntryPrice', stock.entry_price);
+        setText('modalStopLoss', stock.stop_loss);
+        setText('modalTargetPrice', stock.target_price);
+        setText('modalRisk', stock.risk);
+        setText('modalReward', stock.reward);
+        setText('modalRRatio', stock.rr_ratio);
+        setText('modalSupport', stock.support);
+        setText('modalResistance', stock.resistance);
+        setText('modalRSI', stock.rsi);
+        setText('modalMACD', stock.macd);
+        setText('modalSwingScore', (stock.swing_score || 'N/A') + (stock.swing_score ? '/100' : ''));
+        setText('modalProbability', stock.probability_score);
+        setText('modalEntryTime', stock.entry_time);
+
+        document.getElementById('stockModal').classList.add('show');
+    } catch (error) {
+        console.error('Error showing stock details:', error);
+    }
 }
 
 // Close modal
@@ -217,6 +249,11 @@ function hideAllMessages() {
 
 // Initialize tooltips
 function initializeTooltips() {
+    // Check if already initialized to prevent duplicates
+    if (document.getElementById('metric-tooltip')) {
+        return;
+    }
+
     // Create tooltip element
     const tooltip = document.createElement('div');
     tooltip.id = 'metric-tooltip';
@@ -238,35 +275,42 @@ function initializeTooltips() {
     `;
     document.body.appendChild(tooltip);
 
-    // Add info icons to table headers
-    document.querySelectorAll('th').forEach(th => {
-        const text = th.textContent.trim();
-        if (METRIC_INFO[text]) {
-            th.innerHTML = `
-                ${text}
-                <i class="info-icon" data-metric="${text}" style="
-                    display: inline-block;
-                    width: 16px;
-                    height: 16px;
-                    border-radius: 50%;
-                    background: rgba(102, 126, 234, 0.3);
-                    color: #667eea;
-                    font-size: 11px;
-                    line-height: 16px;
-                    text-align: center;
-                    margin-left: 4px;
-                    cursor: help;
-                    font-style: normal;
-                    font-weight: bold;
-                    border: 1px solid rgba(102, 126, 234, 0.5);
-                ">i</i>
-            `;
-        }
-    });
+    // Add info icons to table headers (only once)
+    setTimeout(() => {
+        document.querySelectorAll('th').forEach(th => {
+            // Skip if already has info icon
+            if (th.querySelector('.info-icon')) return;
 
-    // Add hover listeners to info icons
-    document.addEventListener('mouseover', (e) => {
+            const text = th.textContent.trim();
+            if (METRIC_INFO[text]) {
+                th.innerHTML = `
+                    ${text}
+                    <i class="info-icon" data-metric="${text}" style="
+                        display: inline-block;
+                        width: 16px;
+                        height: 16px;
+                        border-radius: 50%;
+                        background: rgba(102, 126, 234, 0.3);
+                        color: #667eea;
+                        font-size: 11px;
+                        line-height: 16px;
+                        text-align: center;
+                        margin-left: 4px;
+                        cursor: help;
+                        font-style: normal;
+                        font-weight: bold;
+                        border: 1px solid rgba(102, 126, 234, 0.5);
+                    ">i</i>
+                `;
+            }
+        });
+    }, 100);
+
+    // Use event delegation for better performance
+    let tooltipTimeout;
+    document.body.addEventListener('mouseover', (e) => {
         if (e.target.classList.contains('info-icon')) {
+            clearTimeout(tooltipTimeout);
             const metric = e.target.getAttribute('data-metric');
             const info = METRIC_INFO[metric];
             if (info) {
@@ -275,19 +319,15 @@ function initializeTooltips() {
                 positionTooltip(e, tooltip);
             }
         }
-    });
+    }, true);
 
-    document.addEventListener('mousemove', (e) => {
-        if (e.target.classList.contains('info-icon') && tooltip.style.opacity === '1') {
-            positionTooltip(e, tooltip);
-        }
-    });
-
-    document.addEventListener('mouseout', (e) => {
+    document.body.addEventListener('mouseout', (e) => {
         if (e.target.classList.contains('info-icon')) {
-            tooltip.style.opacity = '0';
+            tooltipTimeout = setTimeout(() => {
+                tooltip.style.opacity = '0';
+            }, 100);
         }
-    });
+    }, true);
 }
 
 // Position tooltip near cursor
