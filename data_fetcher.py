@@ -48,6 +48,9 @@ try:
 except Exception as e:
     pass
 
+# Check if running in serverless environment
+IS_SERVERLESS = os.environ.get('VERCEL') == '1' or os.environ.get('AWS_LAMBDA_FUNCTION_NAME') is not None
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -79,6 +82,62 @@ class BSEDataFetcher:
             'Connection': 'keep-alive',
         })
     
+    def _fetch_via_yahoo_api(self, ticker, period="3mo"):
+        """
+        Fetch data directly from Yahoo Finance API using requests
+        More reliable for serverless environments
+        """
+        try:
+            logger.info(f"Fetching from Yahoo Finance API for {ticker}...")
+
+            # Convert period to timestamps
+            period_map = {"1d": 1, "5d": 5, "1mo": 30, "3mo": 90, "6mo": 180, "1y": 365}
+            days = period_map.get(period, 90)
+
+            end_time = int(datetime.now().timestamp())
+            start_time = int((datetime.now() - timedelta(days=days)).timestamp())
+
+            # Yahoo Finance API endpoint
+            url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}"
+            params = {
+                "period1": start_time,
+                "period2": end_time,
+                "interval": "1d",
+                "events": "history"
+            }
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            }
+
+            response = self.session.get(url, params=params, headers=headers, timeout=10, verify=False)
+
+            if response.status_code == 200:
+                data = response.json()
+
+                if 'chart' in data and 'result' in data['chart'] and len(data['chart']['result']) > 0:
+                    result = data['chart']['result'][0]
+
+                    timestamps = result['timestamp']
+                    quotes = result['indicators']['quote'][0]
+
+                    df = pd.DataFrame({
+                        'Open': quotes['open'],
+                        'High': quotes['high'],
+                        'Low': quotes['low'],
+                        'Close': quotes['close'],
+                        'Volume': quotes['volume'],
+                        'Adj Close': quotes['close']
+                    }, index=pd.to_datetime(timestamps, unit='s'))
+
+                    logger.info(f"✓ Fetched {len(df)} rows from Yahoo Finance API for {ticker}")
+                    return df
+
+            return None
+        except Exception as e:
+            logger.error(f"Yahoo Finance API failed for {ticker}: {str(e)}")
+            return None
+
     def fetch_historical_data(self, ticker, period="3mo", interval="1d"):
         """
         Fetch historical stock data
@@ -100,6 +159,17 @@ class BSEDataFetcher:
                     return self.cache[cache_key]
             
             logger.info(f"Fetching data for {ticker}...")
+
+            # In serverless environments, prefer direct Yahoo API
+            if IS_SERVERLESS:
+                logger.info("Serverless environment detected - using direct Yahoo API")
+                data = self._fetch_via_yahoo_api(ticker, period)
+                if data is not None and len(data) > 0:
+                    logger.info(f"✓ Successfully fetched data via Yahoo API in serverless mode")
+                    # Cache and return
+                    self.cache[cache_key] = data
+                    self.cache_time[cache_key] = datetime.now()
+                    return data
 
             # Try yfinance with SSL workaround
             data = None
@@ -149,16 +219,21 @@ class BSEDataFetcher:
             if data is None or len(data) == 0:
                 logger.warning(f"yfinance returned no data for {ticker}, trying fallback methods...")
 
-                # Try scraping/API fallback
-                data = self.scrape_bse_data_fallback(ticker, period=period)
-
-                # If all else fails, generate sample data for testing
-                if data is None or len(data) == 0:
-                    logger.error(f"All API methods failed for {ticker}")
-                    logger.warning(f"Generating sample data for {ticker} for testing purposes only")
-                    data = self._generate_sample_data(ticker, period)
+                # Try direct Yahoo API
+                data = self._fetch_via_yahoo_api(ticker, period)
+                if data is not None and len(data) > 0:
+                    logger.info(f"✓ Yahoo API fallback successful for {ticker}")
                 else:
-                    logger.info(f"Fallback successful for {ticker}")
+                    # Try scraping/API fallback
+                    data = self.scrape_bse_data_fallback(ticker, period=period)
+
+                    # If all else fails, generate sample data for testing
+                    if data is None or len(data) == 0:
+                        logger.error(f"All API methods failed for {ticker}")
+                        logger.warning(f"Generating sample data for {ticker} for testing purposes only")
+                        data = self._generate_sample_data(ticker, period)
+                    else:
+                        logger.info(f"Fallback successful for {ticker}")
             
             # Cache the data
             if data is not None and len(data) > 0:
