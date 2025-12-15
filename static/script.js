@@ -76,10 +76,16 @@ async function loadStocks(refresh) {
         const data = await response.json();
         showLoading(false);
 
+        console.log('API Response:', data); // Debug log
+
         if (data.success) {
             currentStocks = data.data || [];
-            displayStocks(data);
-            showStatus(data);
+            if (currentStocks.length === 0) {
+                showError('No stocks found matching your criteria. Try lowering the minimum probability.');
+            } else {
+                displayStocks(data);
+                showStatus(data);
+            }
         } else {
             showError(data.error || 'Unknown error occurred');
             console.error('API Error:', data);
@@ -233,11 +239,28 @@ function showStatus(data) {
 // Show error message
 function showError(errorMessage) {
     const errorBox = document.getElementById('errorBox');
-    document.getElementById('errorTitle').textContent = 'Failed to Load Real Data';
-    document.getElementById('errorMessage').textContent = errorMessage;
+    const errorTitle = document.getElementById('errorTitle');
+    const errorMsg = document.getElementById('errorMessage');
+
+    // Set appropriate title based on error type
+    if (errorMessage.includes('timeout') || errorMessage.includes('Timeout')) {
+        errorTitle.textContent = 'Request Timeout';
+    } else if (errorMessage.includes('500')) {
+        errorTitle.textContent = '500 Internal Server Error';
+    } else if (errorMessage.includes('Network')) {
+        errorTitle.textContent = 'Network Error';
+    } else {
+        errorTitle.textContent = 'Error Loading Data';
+    }
+
+    errorMsg.textContent = errorMessage;
     errorBox.style.display = 'flex';
-    document.getElementById('stocksContainer').style.display = 'none';
-    document.getElementById('emptyState').style.display = 'block';
+
+    // Only hide stocks if we don't have cached data to show
+    if (currentStocks.length === 0) {
+        document.getElementById('stocksContainer').style.display = 'none';
+        document.getElementById('emptyState').style.display = 'block';
+    }
 }
 
 // Hide all message boxes
